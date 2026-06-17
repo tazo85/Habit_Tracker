@@ -1,47 +1,79 @@
-// მოვძებნოთ ელემენტები DOM-იდან
 const input = document.getElementById("taskInput");
 const addBtn = document.getElementById("addBtn");
-const list = document.getElementById("taskList");
+const weekdaySelect = document.getElementById("weekdaySelect");
 
-// Load tasks from localStorage
-let tasks = JSON.parse(localStorage.getItem('tasks')) || [];
+const dayNames = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 
-// Function to save tasks to localStorage
+let tasks = JSON.parse(localStorage.getItem('tasks')) || {};
+// If tasks was previously stored as a simple array (legacy format), migrate into Monday
+if (Array.isArray(tasks)) {
+  const legacy = tasks;
+  tasks = {};
+  dayNames.forEach(d => tasks[d] = []);
+  tasks['Monday'] = legacy.map(t => (typeof t === 'string') ? { text: t, done: false } : (t && typeof t === 'object') ? (t.text ? { text: t.text, done: !!t.done } : { text: String(t), done: false }) : { text: String(t), done: false });
+}
+// ensure all days exist and migrate string entries to objects {text, done}
+dayNames.forEach(d => {
+  if (!Array.isArray(tasks[d])) tasks[d] = [];
+  tasks[d] = tasks[d].map(t => (typeof t === 'string') ? { text: t, done: false } : t);
+});
+
 function saveTasks() {
   localStorage.setItem('tasks', JSON.stringify(tasks));
 }
 
-// Function to add task to DOM
-function addTaskToDOM(taskText, index) {
-  const li = document.createElement("li");
-  li.textContent = taskText;
+function renderDay(day) {
+  const ul = document.getElementById(`${day}List`);
+  if (!ul) return;
+  ul.innerHTML = '';
+  tasks[day].forEach((taskObj, index) => {
+    const li = document.createElement('li');
+    li.textContent = taskObj.text;
 
-  // შევქმნათ წაშლის ღილაკი
-  const removeBtn = document.createElement("button");
-  removeBtn.innerHTML = "&times;";
-  removeBtn.className = "remove-btn";
-  removeBtn.addEventListener("click", function() {
-    list.removeChild(li);
-    tasks.splice(index, 1);
-    saveTasks();
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'remove-btn toggle-btn';
+    toggleBtn.setAttribute('aria-label', 'toggle done');
+    toggleBtn.textContent = taskObj.done ? '✔' : '○';
+    toggleBtn.classList.toggle('checked', taskObj.done);
+    toggleBtn.addEventListener('click', () => {
+      taskObj.done = !taskObj.done;
+      saveTasks();
+      renderDay(day);
+    });
+
+    // delete button next to the toggle
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.setAttribute('aria-label', 'delete task');
+    deleteBtn.textContent = '✕';
+    deleteBtn.addEventListener('click', () => {
+      tasks[day].splice(index, 1);
+      saveTasks();
+      renderDay(day);
+    });
+
+    li.appendChild(toggleBtn);
+    li.appendChild(deleteBtn);
+    ul.appendChild(li);
   });
-
-  li.appendChild(removeBtn);
-  list.appendChild(li);
 }
 
-// Load existing tasks on page load
-tasks.forEach((taskText, index) => {
-  addTaskToDOM(taskText, index);
-});
+function renderAll() {
+  dayNames.forEach(renderDay);
+}
 
-// ღილაკზე დაჭერისას დავამატოთ ახალი task
-addBtn.addEventListener("click", function() {
+addBtn.addEventListener('click', () => {
   const taskText = input.value.trim();
-  if (taskText === "") return;
-
-  tasks.push(taskText);
+  const day = weekdaySelect.value || 'Monday';
+  if (!taskText) return;
+  tasks[day].push({ text: taskText, done: false });
   saveTasks();
-  addTaskToDOM(taskText, tasks.length - 1);
-  input.value = "";
+  renderDay(day);
+  input.value = '';
 });
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addBtn.click();
+});
+
+renderAll();
